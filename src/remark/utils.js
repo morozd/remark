@@ -30,26 +30,14 @@ exports.getClasses = function (element) {
     .filter(function (s) { return s !== ''; });
 };
 
+exports.hasClass = function (element, className) {
+  return exports.getClasses(element).indexOf(className) !== -1;
+};
+
 exports.getPrefixedProperty = function (element, propertyName) {
   var capitalizedPropertName = propertyName[0].toUpperCase() +
     propertyName.slice(1);
 
   return element[propertyName] || element['moz' + capitalizedPropertName] ||
     element['webkit' + capitalizedPropertName];
-};
-
-exports.getHTMLElement = function () {
-  return document.getElementsByTagName('html')[0];
-};
-
-exports.getBodyElement = function () {
-  return document.body;
-};
-
-exports.getLocationHash = function () {
-  return window.location.hash;
-};
-
-exports.setLocationHash = function (hash) {
-  window.location.hash = hash;
 };

@@ -1,15 +1,19 @@
 var SlideView = require('./slideView')
+  , Timer = require('components/timer')
+  , NotesView = require('./notesView')
   , Scaler = require('../scaler')
   , resources = require('../resources')
   , utils = require('../utils')
+  , printing = require('components/printing')
   ;
 
 module.exports = SlideshowView;
 
-function SlideshowView (events, containerElement, slideshow) {
+function SlideshowView (events, dom, containerElement, slideshow) {
   var self = this;
 
   self.events = events;
+  self.dom = dom;
   self.slideshow = slideshow;
   self.scaler = new Scaler(events, slideshow);
   self.slideViews = [];
@@ -21,12 +25,7 @@ function SlideshowView (events, containerElement, slideshow) {
   self.scaleElements();
   self.updateSlideViews();
 
-  self.startTime = null;
-  self.pauseStart = null;
-  self.pauseLength = 0;
-  setInterval(function() {
-      self.updateTimer();
-    }, 100);
+  self.timer = new Timer(events, self.timerElement);
 
   events.on('slidesChanged', function () {
     self.updateSlideViews();
@@ -46,40 +45,49 @@ function SlideshowView (events, containerElement, slideshow) {
     self.showSlide(slideIndex);
   });
 
+  events.on('forcePresenterMode', function () {
+
+    if (!utils.hasClass(self.containerElement, 'remark-presenter-mode')) {
+      utils.toggleClass(self.containerElement, 'remark-presenter-mode');
+      self.scaleElements();
+      printing.setPageOrientation('landscape');
+    }
+  });
+
   events.on('togglePresenterMode', function () {
     utils.toggleClass(self.containerElement, 'remark-presenter-mode');
     self.scaleElements();
+
+    if (utils.hasClass(self.containerElement, 'remark-presenter-mode')) {
+      printing.setPageOrientation('portrait');
+    }
+    else {
+      printing.setPageOrientation('landscape');
+    }
   });
 
   events.on('toggleHelp', function () {
     utils.toggleClass(self.containerElement, 'remark-help-mode');
   });
 
+  events.on('toggleBlackout', function () {
+    utils.toggleClass(self.containerElement, 'remark-blackout-mode');
+  });
+
+  events.on('toggleMirrored', function () {
+    utils.toggleClass(self.containerElement, 'remark-mirrored-mode');
+  });
+
   events.on('hideOverlay', function () {
+    utils.removeClass(self.containerElement, 'remark-blackout-mode');
     utils.removeClass(self.containerElement, 'remark-help-mode');
   });
 
-  events.on('start', function () {
-    // When we do the first slide change, start the clock.
-    self.startTime = new Date();
-  });
-
-  events.on('resetTimer', function () {
-    // If we reset the timer, clear everything.
-    self.startTime = null;
-    self.pauseStart = null;
-    self.pauseLength = 0;
-    self.timerElement.innerHTML = '0:00:00';
-  });
-
   events.on('pause', function () {
-    self.pauseStart = new Date();
     utils.toggleClass(self.containerElement, 'remark-pause-mode');
   });
 
   events.on('resume', function () {
-    self.pauseLength += new Date() - self.pauseStart;
-    self.pauseStart = null;
     utils.toggleClass(self.containerElement, 'remark-pause-mode');
   });
 
@@ -106,7 +114,7 @@ function handleFullscreen(self) {
 }
 
 SlideshowView.prototype.isEmbedded = function () {
-  return this.containerElement !== utils.getBodyElement();
+  return this.containerElement !== this.dom.getBodyElement();
 };
 
 SlideshowView.prototype.configureContainerElement = function (element) {
@@ -116,14 +124,15 @@ SlideshowView.prototype.configureContainerElement = function (element) {
 
   utils.addClass(element, 'remark-container');
 
-  if (element === utils.getBodyElement()) {
-    utils.addClass(utils.getHTMLElement(), 'remark-container');
+  if (element === self.dom.getBodyElement()) {
+    utils.addClass(self.dom.getHTMLElement(), 'remark-container');
 
     forwardEvents(self.events, window, [
-      'hashchange', 'resize', 'keydown', 'keypress', 'mousewheel', 'message'
+      'hashchange', 'resize', 'keydown', 'keypress', 'mousewheel',
+      'message', 'DOMMouseScroll'
     ]);
     forwardEvents(self.events, self.containerElement, [
-      'touchstart', 'touchmove', 'touchend'
+      'touchstart', 'touchmove', 'touchend', 'click', 'contextmenu'
     ]);
   }
   else {
@@ -168,24 +177,9 @@ SlideshowView.prototype.configureChildElements = function () {
   self.elementArea = self.containerElement.getElementsByClassName('remark-slides-area')[0];
   self.previewArea = self.containerElement.getElementsByClassName('remark-preview-area')[0];
   self.notesArea = self.containerElement.getElementsByClassName('remark-notes-area')[0];
-  self.notesElement = self.notesArea.getElementsByClassName('remark-notes')[0];
-  self.toolbarElement = self.notesArea.getElementsByClassName('remark-toolbar')[0];
 
-  var commands = {
-    increase: function () {
-      self.notesElement.style.fontSize = (parseFloat(self.notesElement.style.fontSize) || 1) + 0.1 + 'em';
-    },
-    decrease: function () {
-      self.notesElement.style.fontSize = (parseFloat(self.notesElement.style.fontSize) || 1) - 0.1 + 'em';
-    }
-  };
-
-  self.toolbarElement.getElementsByTagName('a').forEach(function (link) {
-    link.addEventListener('click', function (e) {
-      var command = e.target.hash.substr(1);
-      commands[command]();
-      e.preventDefault();
-    });
+  self.notesView = new NotesView (self.events, self.notesArea, function () {
+    return self.slideViews;
   });
 
   self.backdropElement = self.containerElement.getElementsByClassName('remark-backdrop')[0];
@@ -202,21 +196,34 @@ SlideshowView.prototype.configureChildElements = function () {
 
   self.events.on('resize', onResize);
 
-  if (window.matchMedia) {
-    window.matchMedia('print').addListener(function (e) {
-      if (e.matches) {
-        self.slideViews.forEach(function (slideView) {
-          slideView.scale({
-            clientWidth: 908,
-            clientHeight: 681
-          });
-        });
-      }
-    });
-  }
+  printing.init();
+  printing.on('print', onPrint);
 
   function onResize () {
     self.scaleElements();
+  }
+
+  function onPrint (e) {
+    var slideHeight;
+
+    if (e.isPortrait) {
+      slideHeight = e.pageHeight * 0.4;
+    }
+    else {
+      slideHeight = e.pageHeight;
+    }
+
+    self.slideViews.forEach(function (slideView) {
+      slideView.scale({
+        clientWidth: e.pageWidth,
+        clientHeight: slideHeight
+      });
+
+      if (e.isPortrait) {
+        slideView.scalingElement.style.top = '20px';
+        slideView.notesElement.style.top = slideHeight + 40 + 'px';
+      }
+    });
   }
 };
 
@@ -237,8 +244,8 @@ SlideshowView.prototype.updateSlideViews = function () {
 
   self.updateDimensions();
 
-  if (self.slideshow.getCurrentSlideNo() > 0) {
-    self.showSlide(self.slideshow.getCurrentSlideNo() - 1);
+  if (self.slideshow.getCurrentSlideIndex() > -1) {
+    self.showSlide(self.slideshow.getCurrentSlideIndex());
   }
 };
 
@@ -253,13 +260,12 @@ SlideshowView.prototype.scaleSlideBackgroundImages = function (dimensions) {
 SlideshowView.prototype.showSlide =  function (slideIndex) {
   var self = this
     , slideView = self.slideViews[slideIndex]
-    , nextSlideView = self.slideViews[slideIndex + 1];
+    , nextSlideView = self.slideViews[slideIndex + 1]
+    ;
 
   self.events.emit("beforeShowSlide", slideIndex);
 
   slideView.show();
-
-  self.notesElement.innerHTML = slideView.notesElement.innerHTML;
 
   if (nextSlideView) {
     self.previewArea.innerHTML = nextSlideView.containerElement.outerHTML;
@@ -273,7 +279,8 @@ SlideshowView.prototype.showSlide =  function (slideIndex) {
 
 SlideshowView.prototype.hideSlide = function (slideIndex) {
   var self = this
-    , slideView = self.slideViews[slideIndex];
+    , slideView = self.slideViews[slideIndex]
+    ;
 
   self.events.emit("beforeHideSlide", slideIndex);
   slideView.hide();
@@ -291,28 +298,6 @@ SlideshowView.prototype.updateDimensions = function () {
 
   self.scaleSlideBackgroundImages(dimensions);
   self.scaleElements();
-};
-
-SlideshowView.prototype.updateTimer = function () {
-  var self = this;
-
-  if (self.startTime) {
-    var millis;
-    // If we're currently paused, measure elapsed time from the pauseStart.
-    // Otherwise, use "now".
-    if (self.pauseStart) {
-      millis = self.pauseStart - self.startTime - self.pauseLength;
-    } else {
-      millis = new Date() - self.startTime - self.pauseLength;
-    }
-
-    var seconds = Math.floor(millis / 1000) % 60;
-    var minutes = Math.floor(millis / 60000) % 60;
-    var hours = Math.floor(millis / 3600000);
-
-    self.timerElement.innerHTML = hours + (minutes > 9 ? ':' : ':0') + minutes + (seconds > 9 ? ':' : ':0') + seconds;
-  }
-
 };
 
 SlideshowView.prototype.scaleElements = function () {

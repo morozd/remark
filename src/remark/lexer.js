@@ -1,21 +1,31 @@
 module.exports = Lexer;
 
 var CODE = 1,
-    CONTENT = 2,
-    FENCES = 3,
-    SEPARATOR = 4,
-    NOTES_SEPARATOR = 5;
+    INLINE_CODE = 2,
+    CONTENT = 3,
+    FENCES = 4,
+    DEF = 5,
+    DEF_HREF = 6,
+    DEF_TITLE = 7,
+    MACRO = 8,
+    MACRO_ARGS = 9,
+    MACRO_OBJ = 10,
+    SEPARATOR = 11,
+    NOTES_SEPARATOR = 12;
 
 var regexByName = {
     CODE: /(?:^|\n)( {4}[^\n]+\n*)+/,
+    INLINE_CODE: /`([^`]+?)`/,
     CONTENT: /(?:\\)?((?:\.[a-zA-Z_\-][a-zA-Z\-_0-9]*)+)\[/,
-    FENCES: /(?:^|\n) *(`{3,}|~{3,}) *(?:\S+)? *\n(?:[\s\S]+?)\s*\3 *(?:\n+|$)/,
+    FENCES: /(?:^|\n) *(`{3,}|~{3,}) *(?:\S+)? *\n(?:[\s\S]+?)\s*\4 *(?:\n+|$)/,
+    DEF: /(?:^|\n) *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +["(]([^\n]+)[")])? *(?:\n+|$)/,
+    MACRO: /!\[:([^\] ]+)([^\]]*)\](?:\(([^\)]*)\))?/,
     SEPARATOR: /(?:^|\n)(---?)(?:\n|$)/,
     NOTES_SEPARATOR: /(?:^|\n)(\?{3})(?:\n|$)/
   };
 
-var block = replace(/CODE|CONTENT|FENCES|SEPARATOR|NOTES_SEPARATOR/, regexByName),
-    inline = replace(/CODE|CONTENT|FENCES/, regexByName);
+var block = replace(/CODE|INLINE_CODE|CONTENT|FENCES|DEF|MACRO|SEPARATOR|NOTES_SEPARATOR/, regexByName),
+    inline = replace(/CODE|INLINE_CODE|CONTENT|FENCES|DEF|MACRO/, regexByName);
 
 function Lexer () { }
 
@@ -52,10 +62,32 @@ function lex (src, regex, tokens) {
         text: cap[0]
       });
     }
+    else if (cap[INLINE_CODE]) {
+      tokens.push({
+        type: 'text',
+        text: cap[0]
+      });
+    }
     else if (cap[FENCES]) {
       tokens.push({
         type: 'fences',
         text: cap[0]
+      });
+    }
+    else if (cap[DEF]) {
+      tokens.push({
+        type: 'def',
+        id: cap[DEF],
+        href: cap[DEF_HREF],
+        title: cap[DEF_TITLE]
+      });
+    }
+    else if (cap[MACRO]) {
+      tokens.push({
+        type: 'macro',
+        name: cap[MACRO],
+        args: (cap[MACRO_ARGS] || '').split(',').map(trim),
+        obj: cap[MACRO_OBJ]
       });
     }
     else if (cap[SEPARATOR]) {
@@ -74,16 +106,25 @@ function lex (src, regex, tokens) {
       text = getTextInBrackets(src, cap.index + cap[0].length);
       if (text !== undefined) {
         src = src.substring(text.length + 1);
-        tokens.push({
-          type: 'content_start',
-          classes: cap[CONTENT].substring(1).split('.'),
-          block: text.indexOf('\n') !== -1
-        });
-        lex(text, inline, tokens);
-        tokens.push({
-          type: 'content_end',
-          block: text.indexOf('\n') !== -1
-        });
+
+        if (cap[0][0] !== '\\') {
+          tokens.push({
+            type: 'content_start',
+            classes: cap[CONTENT].substring(1).split('.'),
+            block: text.indexOf('\n') !== -1
+          });
+          lex(text, inline, tokens);
+          tokens.push({
+            type: 'content_end',
+            block: text.indexOf('\n') !== -1
+          });
+        }
+        else {
+          tokens.push({
+            type: 'text',
+            text: cap[0].substring(1) + text + ']'
+          });
+        }
       }
       else {
         tokens.push({
@@ -110,6 +151,14 @@ function replace (regex, replacements) {
   return new RegExp(regex.source.replace(/\w{2,}/g, function (key) {
     return replacements[key].source;
   }));
+}
+
+function trim (text) {
+  if (typeof text === 'string') {
+    return text.trim();
+  }
+
+  return text;
 }
 
 function getTextInBrackets (src, offset) {

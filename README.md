@@ -1,5 +1,7 @@
 # remark
 
+[![Build Status](https://travis-ci.org/gnab/remark.svg?branch=develop)](https://travis-ci.org/gnab/remark)
+
 A simple, in-browser, markdown-driven slideshow tool targeted at people who know their way around HTML and CSS, featuring:
 
 - Markdown formatting, with smart extensions
@@ -9,6 +11,8 @@ A simple, in-browser, markdown-driven slideshow tool targeted at people who know
 - Touch support for smart phones and pads, i.e. swipe to navigate slides
 
 Check out [this remark slideshow](http://gnab.github.com/remark) for a brief introduction.
+
+To render your Markdown-based slideshow on the fly, checkout [Remarkise](https://gnab.github.io/remark/remarkise).
 
 ### Getting Started
 
@@ -27,7 +31,16 @@ Below is a boilerplate HTML file to get you started:
     <title>Title</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
     <style type="text/css">
-      /* Slideshow styles */
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
     </style>
   </head>
   <body>
@@ -50,9 +63,9 @@ class: center, middle
 # Introduction
 
     </textarea>
-    <script src="http://gnab.github.io/remark/downloads/remark-0.6.3.min.js" type="text/javascript">
+    <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js">
     </script>
-    <script type="text/javascript">
+    <script>
       var slideshow = remark.create();
     </script>
   </body>
@@ -82,9 +95,11 @@ Other interesting stuff:
 - [mobmad.github.com/js-tdd-erfaringer](http://mobmad.github.com/js-tdd-erfaringer)
 - [torgeir.github.com/busterjs-lightning-talk](http://torgeir.github.com/busterjs-lightning-talk)
 - [roberto.github.com/ruby-sinform-2012](http://roberto.github.com/ruby-sinform-2012)
+- [http://asmeurer.github.io/python3-presentation/slides.html](http://asmeurer.github.io/python3-presentation/slides.html)
 
 ### Other systems integrating with remark
 
+- [http://platon.io](http://platon.io)
 - [http://markdowner.com](http://markdowner.com)
 - [http://remarks.sinaapp.com](http://remarks.sinaapp.com/)
 
@@ -97,5 +112,5 @@ Other interesting stuff:
 
 ### License
 
-remark is licensed under the MIT license. See LICENCE for further
+remark is licensed under the MIT license. See LICENSE for further
 details.

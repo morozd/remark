@@ -1,15 +1,16 @@
-all: deps bundle
+all: deps
+	node make all
 
 deps:
-	npm install && git submodule update --init --recursive
-
-resources:
-	node make resources
+	npm install
 
 test:
 	node make test
 
 bundle:
-	node make
+	node make bundle
 
-.PHONY: deps test bundle
+highlighter:
+	node make highlighter
+
+.PHONY: deps test bundle highlighter

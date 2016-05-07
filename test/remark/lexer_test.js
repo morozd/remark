@@ -53,11 +53,17 @@ describe('Lexer', function () {
       ]);
     });
 
-    it('should recignize multiple content classes', function () {
+    it('should recognize multiple content classes', function () {
       lexer.lex('.c1.c2[content]').should.eql([
         {type: 'content_start', classes: ['c1', 'c2'], block: false},
         {type: 'text', text: 'content'},
         {type: 'content_end', block: false}
+      ]);
+    });
+
+    it('should ignore escaped content class', function () {
+      lexer.lex('\\.class[content]').should.eql([
+        {type: 'text', text: '.class[content]'},
       ]);
     });
 
@@ -87,6 +93,12 @@ describe('Lexer', function () {
       ]);
     });
 
+    it('should leave content class inside inline code as-is', function () {
+      lexer.lex('`.class[x]`').should.eql([
+        {type: 'text', text: '`.class[x]`'}
+      ]);
+    });
+
     it('should leave content class inside fences as-is', function () {
       lexer.lex('```\n.class[x]\n```').should.eql([
         {type: 'fences', text: '```\n.class[x]\n```'}
@@ -100,6 +112,28 @@ describe('Lexer', function () {
         {type: 'text', text: 'x'},
         {type: 'content_end', block: false},
         {type: 'content_end', block: false}
+      ]);
+    });
+
+    it('should recognize link definition', function () {
+      lexer.lex('[id]: http://url.com "website"').should.eql([
+        {
+          type: 'def',
+          id: 'id',
+          href: 'http://url.com',
+          title: 'website'
+        }
+      ]);
+    });
+
+    it('should recognise macro', function () {
+      lexer.lex('![:piechart a, b, c](d)').should.eql([
+        {
+          type: 'macro',
+          name: 'piechart',
+          args: ['a', 'b', 'c'],
+          obj: 'd'
+        }
       ]);
     });
   });

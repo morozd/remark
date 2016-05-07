@@ -1,6 +1,5 @@
 {
   "name": "remark",
-  "version": "0.6.3",
   "homepage": "http://remarkjs.com/",
   "authors": [
     "Ole Petter Bang <olepbang@gmail.com>"
@@ -18,7 +17,7 @@
     ".jshintignore",
     ".jshintrc",
     "HISTORY.md",
-    "LICENCE",
+    "LICENSE",
     "make.js",
     "Makefile",
     "package.json",

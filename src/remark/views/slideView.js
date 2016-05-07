@@ -1,4 +1,5 @@
-var converter = require('../converter')
+var SlideNumber = require('components/slide-number')
+  , converter = require('../converter')
   , highlighter = require('../highlighter')
   , utils = require('../utils')
   ;
@@ -12,6 +13,8 @@ function SlideView (events, slideshow, scaler, slide) {
   self.slideshow = slideshow;
   self.scaler = scaler;
   self.slide = slide;
+
+  self.slideNumber = new SlideNumber(slide, slideshow);
 
   self.configureElements();
   self.updateDimensions();
@@ -70,15 +73,11 @@ SlideView.prototype.configureElements = function () {
   self.contentElement = createContentElement(self.events, self.slideshow, self.slide);
   self.notesElement = createNotesElement(self.slideshow, self.slide.notes);
 
-  self.numberElement = document.createElement('div');
-  self.numberElement.className = 'remark-slide-number';
-  self.numberElement.innerHTML = self.slide.number + ' / ' + self.slideshow.getSlides().length;
-
-  self.contentElement.appendChild(self.numberElement);
+  self.contentElement.appendChild(self.slideNumber.element);
   self.element.appendChild(self.contentElement);
-  self.element.appendChild(self.notesElement);
   self.scalingElement.appendChild(self.element);
   self.containerElement.appendChild(self.scalingElement);
+  self.containerElement.appendChild(self.notesElement);
 };
 
 SlideView.prototype.scaleBackgroundImage = function (dimensions) {
@@ -87,6 +86,7 @@ SlideView.prototype.scaleBackgroundImage = function (dimensions) {
     , backgroundImage = styles.backgroundImage
     , match
     , image
+    , scale
     ;
 
   if ((match = /^url\(("?)([^\)]+?)\1\)/.exec(backgroundImage)) !== null) {
@@ -98,14 +98,27 @@ SlideView.prototype.scaleBackgroundImage = function (dimensions) {
         if (!self.originalBackgroundSize) {
           // No custom background size has been set
           self.originalBackgroundSize = self.contentElement.style.backgroundSize;
+          self.originalBackgroundPosition = self.contentElement.style.backgroundPosition;
           self.backgroundSizeSet = true;
-          self.contentElement.style.backgroundSize = 'contain';
+
+          if (dimensions.width / image.width < dimensions.height / image.height) {
+            scale = dimensions.width / image.width;
+          }
+          else {
+            scale = dimensions.height / image.height;
+          }
+
+          self.contentElement.style.backgroundSize = image.width * scale +
+            'px ' + image.height * scale + 'px';
+          self.contentElement.style.backgroundPosition = '50% ' +
+            ((dimensions.height - (image.height * scale)) / 2) + 'px';
         }
       }
       else {
         // Revert to previous background size setting
         if (self.backgroundSizeSet) {
           self.contentElement.style.backgroundSize = self.originalBackgroundSize;
+          self.contentElement.style.backgroundPosition = self.originalBackgroundPosition;
           self.backgroundSizeSet = false;
         }
       }
@@ -123,8 +136,7 @@ function createContentElement (events, slideshow, slide) {
 
   styleContentElement(slideshow, element, slide.properties);
 
-  element.innerHTML = converter.convertMarkdown(slide.content);
-  element.innerHTML = element.innerHTML.replace(/<p>\s*<\/p>/g, '');
+  element.innerHTML = converter.convertMarkdown(slide.content, slideshow.getLinks());
 
   highlightCodeBlocks(element, slideshow);
 
@@ -142,10 +154,9 @@ function styleContentElement (slideshow, element, properties) {
 function createNotesElement (slideshow, notes) {
   var element = document.createElement('div');
 
-  element.style.display = 'none';
+  element.className = 'remark-slide-notes';
 
   element.innerHTML = converter.convertMarkdown(notes);
-  element.innerHTML = element.innerHTML.replace(/<p>\s*<\/p>/g, '');
 
   highlightCodeBlocks(element, slideshow);
 
@@ -183,6 +194,7 @@ function highlightCodeBlocks (content, slideshow) {
 
   codeBlocks.forEach(function (block) {
     if (block.parentElement.tagName !== 'PRE') {
+      utils.addClass(block, 'remark-inline-code');
       return;
     }
 
@@ -190,10 +202,62 @@ function highlightCodeBlocks (content, slideshow) {
       block.className = slideshow.getHighlightLanguage();
     }
 
+    var meta = extractMetadata(block);
+
     if (block.className !== '') {
       highlighter.engine.highlightBlock(block, '  ');
     }
 
+    wrapLines(block);
+    highlightBlockLines(block, meta.highlightedLines);
+    highlightBlockSpans(block);
+
     utils.addClass(block, 'remark-code');
+  });
+}
+
+function extractMetadata (block) {
+  var highlightedLines = [];
+
+  block.innerHTML = block.innerHTML.split(/\r?\n/).map(function (line, i) {
+    if (line.indexOf('*') === 0) {
+      highlightedLines.push(i);
+      return line.replace(/^\*( )?/, '$1$1');
+    }
+
+    return line;
+  }).join('\n');
+
+  return {
+    highlightedLines: highlightedLines
+  };
+}
+
+function wrapLines (block) {
+  var lines = block.innerHTML.split(/\r?\n/).map(function (line) {
+    return '<div class="remark-code-line">' + line + '</div>';
+  });
+
+  // Remove empty last line (due to last \n)
+  if (lines.length && lines[lines.length - 1].indexOf('><') !== -1) {
+    lines.pop();
+  }
+
+  block.innerHTML = lines.join('');
+}
+
+function highlightBlockLines (block, lines) {
+  lines.forEach(function (i) {
+    utils.addClass(block.childNodes[i], 'remark-code-line-highlighted');
+  });
+}
+
+function highlightBlockSpans (block) {
+  var pattern = /([^\\`])`([^`]+?)`/g
+    , replacement = '$1<span class="remark-code-span-highlighted">$2</span>'
+    ;
+
+  block.childNodes.forEach(function (element) {
+    element.innerHTML = element.innerHTML.replace(pattern, replacement);
   });
 }

@@ -37,6 +37,13 @@ describe('Parser', function () {
       slides[2].content.should.eql(['3']);
     });
 
+    it('should ignore excluded slides', function () {
+      var slides = parser.parse('1\n---\nexclude: true\n2\n---\n3');
+
+      slides[0].content.should.eql(['1']);
+      slides[1].content.should.eql(['3']);
+    });
+
     it('should handle empty source', function () {
       parser.parse('')[0].content.should.eql(['']);
     });
@@ -61,7 +68,7 @@ describe('Parser', function () {
     });
 
     it('should ignore content class inside code', function () {
-      parser.parse('    .class[x]')[0].content.should.eql(['    .class[x]']);
+      parser.parse('some code\n    .class[x]')[0].content.should.eql(['some code\n    .class[x]']);
     });
   });
 
@@ -76,6 +83,42 @@ describe('Parser', function () {
     it('should ignore content class inside fences', function () {
       parser.parse('```\n.class[x]\n```')[0].content
         .should.eql(['```\n.class[x]\n```']);
+    });
+  });
+
+  describe('parsing link definitions', function () {
+    it('should extract link definitions', function () {
+      parser.parse('[id]: http://url.com "title"')[0].links.id
+        .should.eql({ href: 'http://url.com', title: 'title' });
+    });
+  });
+
+  describe('parsing macros', function () {
+    it('should expand macro', function () {
+      var macros = {
+        sum: function () {
+          var result = 0;
+          for (var i = 0; i < arguments.length; ++i) {
+            result += parseInt(arguments[i], 10);
+          }
+          return result;
+        }
+      };
+      parser.parse('a ![:sum 1, 2, 3] b', macros)[0].content
+        .should.eql(['a 6 b']);
+    });
+
+    it('should expand macro recursively', function () {
+      var macros = {
+        upper: function () {
+          return this.toUpperCase();
+        },
+        addupper: function () {
+          return "![:upper](word)";
+        }
+      };
+      parser.parse('Uppercase => ![:addupper](word)', macros)[0].content
+        .should.eql(['Uppercase => WORD']);
     });
   });
 
@@ -157,6 +200,56 @@ describe('Parser', function () {
 
     it('should extract properties from source', function () {
       parser.parse('name: a\nclass:b\n1')[0].content.should.eql(['\n1']);
+    });
+  });
+
+  describe('parsing content that is indented', function () {
+    it('should handle leading whitespace on all lines', function () {
+      var slides = parser.parse('      1\n      ---\n      2\n      ---\n      3');
+
+      slides[0].content.should.eql(['1']);
+      slides[1].content.should.eql(['2']);
+      slides[2].content.should.eql(['3']);
+    });
+
+    it('should ignore empty lines when calculating whitespace to trim', function () {
+      var slides = parser.parse('      1\n\n      1\n      ---\n      2\n      ---\n      3');
+
+      slides[0].content.should.eql(['1\n\n1']);
+      slides[1].content.should.eql(['2']);
+      slides[2].content.should.eql(['3']);
+    });
+
+    it('should ignore blank lines when calculating whitespace to trim', function () {
+      var slides = parser.parse('      1\n \n      1\n      ---\n      2\n      ---\n      3');
+
+      slides[0].content.should.eql(['1\n\n1']);
+      slides[1].content.should.eql(['2']);
+      slides[2].content.should.eql(['3']);
+    });
+
+    it('should preserve leading whitespace that goes beyond the minimum whitespace on inner lines', function () {
+      var slides = parser.parse('      1\n      ---\n          2\n      ---\n      3');
+
+      slides[0].content.should.eql(['1']);
+      slides[1].content.should.eql(['    2\n']); // Note: lexer includes trailing newines in code blocks
+      slides[2].content.should.eql(['3']);
+    });
+
+    it('should preserve leading whitespace that goes beyond the minimum whitespace on the first line', function () {
+      var slides = parser.parse('          1\n      ---\n      2\n      ---\n      3');
+
+      slides[0].content.should.eql(['    1\n']); // Note: lexer includes trailing newines in code blocks
+      slides[1].content.should.eql(['2']);
+      slides[2].content.should.eql(['3']);
+    });
+
+    it('should preserve leading whitespace that goes beyond the minimum whitespace on the last line', function () {
+      var slides = parser.parse('      1\n      ---\n      2\n      ---\n          3');
+
+      slides[0].content.should.eql(['1']);
+      slides[1].content.should.eql(['2']);
+      slides[2].content.should.eql(['    3']);
     });
   });
 
